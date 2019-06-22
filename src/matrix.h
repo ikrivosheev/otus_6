@@ -14,37 +14,47 @@ public:
     Cell(
         std::shared_ptr<matrix_type<T>> matrix,
         const int row,
-        const int column): _matrix(matrix), _row(row), _column(column) {};
-    Cell(const Cell& cell) {
-        _row = cell._row;
-        _column = cell._column;
-    }
+        const int column): _key(row, column), _matrix(matrix) {};
+    Cell(const Cell& cell) = default;
     ~Cell() = default;
 
     int getRow() const {
-        return _row;
+        return _key.first();
     }
 
     int getColumn() const {
-        return _column;
+        return _key.second;
     }
 
     Cell<T, VALUE>& operator =(const T& value) {
-        (*_matrix.get())[std::pair<int, int>(_row, _column)] = value;
+        auto it = _matrix->find(_key);
+        if (it == _matrix->end()) {
+            if (value != VALUE) {
+                (*_matrix)[_key] = value;
+            }
+        }
+        else {
+            if (value == VALUE) {
+                _matrix->erase(it);
+            }
+            else {
+                (*_matrix)[_key] = value;
+            }
+        }
         return (*this);
     };
 
     bool operator == (const T& value) const {
-        auto it = _matrix.get()->find(std::pair<int, int>(_row, _column));
-        if (it == _matrix.get()->end()) {
+        auto it = _matrix->find(_key);
+        if (it == _matrix->end()) {
             return value == VALUE;
         }
         return (*it).second == value;
     }
 
     friend std::ostream& operator <<(std::ostream& out, const Cell<T, VALUE>& cell) {
-        auto it = cell._matrix.get()->find(std::pair<int, int>(cell._row, cell._column));
-        if (it == cell._matrix.get()->end()) {
+        auto it = cell._matrix->find(cell._key);
+        if (it == cell._matrix->end()) {
             out << VALUE;
         }
         else {
@@ -54,8 +64,7 @@ public:
     };
 
 private:
-    int _row;
-    int _column;
+    std::pair<int, int> _key;
     std::shared_ptr<matrix_type<T>> _matrix;
 };
 
@@ -64,7 +73,7 @@ template<typename T, T VALUE>
 class Row {
 public:
     Row(std::shared_ptr<matrix_type<T>> matrix, const int row):
-        _matrix(matrix), _row(row) {};
+        _row(row), _matrix(matrix){};
 
     Row(const Row& row) {
         _matrix = row._matrix;
@@ -85,14 +94,7 @@ private:
 template <typename T>
 class MatrixIterator {
 public:
-    MatrixIterator(std::shared_ptr<matrix_type<T>> matrix, bool begin): _matrix(matrix) {
-        if (begin) {
-            this->_it = _matrix.get()->begin();
-        }
-        else {
-            this->_it = _matrix.get()->end();
-        }
-    };
+    MatrixIterator(const T& it): _it(it) {};
 
     bool operator !=(const MatrixIterator<T>& iterator) const {
         return _it != iterator._it;
@@ -102,7 +104,7 @@ public:
         return _it == iterator._it;
     }
 
-    std::tuple<int, int, T&> operator *() const {
+    std::tuple<int, int, typename std::iterator_traits<T>::value_type::second_type&> operator *() const {
         auto& idx = (*_it).first;
         auto& value = (*_it).second;
         return std::make_tuple(idx.first, idx.second, std::ref(value));
@@ -114,8 +116,7 @@ public:
     }
 
 private:
-    std::shared_ptr<matrix_type<T>> _matrix;
-    typename matrix_type<T>::iterator _it;
+    T _it;
 };
 
 
@@ -127,8 +128,8 @@ public:
     using const_pointer = const pointer;
     using reference = value_type&;
     using const_reference = const reference;
-    using iterator = MatrixIterator<T>;
-    using const_iterator = MatrixIterator<const T>;
+    using iterator = MatrixIterator<typename matrix_type<T>::iterator>;
+    using const_iterator = MatrixIterator<typename matrix_type<T>::const_iterator>;
 
     Matrix(const Matrix<T, VALUE>& matrix) {
         _matrix = matrix._matrix;
@@ -138,7 +139,7 @@ public:
     ~Matrix() = default;
 
     int size() const {
-        return _matrix.get()->size();
+        return _matrix->size();
     };
 
     Row<T, VALUE> operator [](int idx) const {
@@ -146,18 +147,19 @@ public:
     };
 
     iterator begin() {
-        return iterator(_matrix, true);
+        return iterator(_matrix->begin());
     }
 
     iterator end() {
-        return iterator(_matrix, false);
+        return iterator(_matrix.end());
     }
 
     const_iterator cbegin() {
-        return const_iterator(_matrix);
+        return const_iterator(_matrix.cbegin());
     }
 
     const_iterator cend() {
+        return const_iterator(_matrix.cend());
     }
 
 private:
